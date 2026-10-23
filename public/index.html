@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Is This Yours? — AI text check</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="page">
+
+    <div class="mark">Is This Yours?</div>
+
+    <main class="sheet">
+      <h1>Is this yours?</h1>
+      <p class="sub">
+        Paste a chapter below. We'll tell you which lines read like they
+        weren't typed by a person — so you can fix them before an editor does.
+      </p>
+
+      <form id="checkForm">
+        <label for="manuscript" class="visually-hidden">Your text</label>
+        <textarea
+          id="manuscript"
+          name="manuscript"
+          placeholder="Paste your chapter here…"
+          spellcheck="false"
+          required
+        ></textarea>
+
+        <div class="formRow">
+          <span id="wordCount" class="wordCount">0 words</span>
+          <button type="submit" id="checkBtn">Check the text</button>
+        </div>
+      </form>
+
+      <p id="errorMsg" class="errorMsg" hidden></p>
+
+      <section id="results" class="results" hidden>
+        <div class="verdict">
+          <div id="stamp" class="stamp">checking</div>
+          <div class="verdictNumbers">
+            <div class="scoreLabel">likely AI-written</div>
+            <div id="scoreValue" class="scoreValue">0%</div>
+          </div>
+        </div>
+
+        <h2>Your text, annotated</h2>
+        <p class="annotatedHint">
+          Shaded lines scored higher for AI patterns. Darker shading, higher
+          confidence. Tap a line on mobile, or hover on desktop, for its
+          individual score.
+        </p>
+        <div id="annotated" class="annotated"></div>
+      </section>
+    </main>
+
+    <footer>
+      Powered by an open model (<code>chatgpt-detector-roberta</code>) via
+      Hugging Face's free inference tier. Treat the score as a second
+      opinion, not a verdict — these tools are wrong often enough that no
+      score alone should decide anything.
+    </footer>
+  </div>
+
+  <script src="/script.js"></script>
+</body>
+        </html>
