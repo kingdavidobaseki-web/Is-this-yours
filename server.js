@@ -14,7 +14,13 @@ const MAX_SENTENCES = 120;
 const MAX_CHARS_PER_SENTENCE = 600;
 
 app.use(express.json({ limit: '1mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve the three frontend files directly from the repo root —
+// no /public subfolder needed, so no slash to type or mistype
+// when creating files through GitHub's mobile web upload.
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/style.css', (req, res) => res.sendFile(path.join(__dirname, 'style.css')));
+app.get('/script.js', (req, res) => res.sendFile(path.join(__dirname, 'script.js')));
 
 // Very small sentence splitter. Good enough for prose; not meant to be
 // a full NLP tokenizer. Keeps abbreviations like "Mr." from exploding
