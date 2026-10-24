@@ -6,7 +6,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const HF_TOKEN = process.env.HF_TOKEN;
 const MODEL_ID = 'Hello-SimpleAI/chatgpt-detector-roberta';
-const HF_URL = `https://api-inference.huggingface.co/models/${MODEL_ID}`;
+// Hugging Face retired the old api-inference.huggingface.co host in 2026 —
+// everything now goes through the router instead.
+const HF_URL = `https://router.huggingface.co/hf-inference/models/${MODEL_ID}`;
 
 // Keep requests small enough to stay comfortably inside the HF free tier
 // and avoid a single oversized payload timing out.
@@ -55,8 +57,9 @@ async function callDetector(inputs) {
     headers: {
       Authorization: `Bearer ${HF_TOKEN}`,
       'Content-Type': 'application/json',
+      'x-wait-for-model': 'true',
     },
-    body: JSON.stringify({ inputs, options: { wait_for_model: true } }),
+    body: JSON.stringify({ inputs }),
   });
 
   const data = await response.json();
