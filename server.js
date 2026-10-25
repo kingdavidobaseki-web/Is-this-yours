@@ -61,6 +61,7 @@ async function callDetector(sentences) {
       model: GROQ_MODEL,
       temperature: 0,
       response_format: { type: 'json_object' },
+      max_completion_tokens: 10000,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: numbered },
