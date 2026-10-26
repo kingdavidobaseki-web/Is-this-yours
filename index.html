@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Is This Yours? — AI text check</title>
+  <title>Is This Yours? — AI check</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -19,56 +19,137 @@
 
     <main class="sheet">
       <h1>Is this yours?</h1>
-      <p class="sub">
+      <p class="sub" id="subText">
         Paste a chapter below. We'll tell you which lines read like they
         weren't typed by a person — so you can fix them before an editor does.
       </p>
 
-      <form id="checkForm">
-        <label for="manuscript" class="visually-hidden">Your text</label>
-        <textarea
-          id="manuscript"
-          name="manuscript"
-          placeholder="Paste your chapter here…"
-          spellcheck="false"
-          required
-        ></textarea>
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab active" id="tabText" role="tab" aria-selected="true">Text</button>
+        <button type="button" class="tab" id="tabImage" role="tab" aria-selected="false">Image</button>
+        <button type="button" class="tab" id="tabHumanize" role="tab" aria-selected="false">Humanize ✦</button>
+      </div>
 
-        <div class="formRow">
-          <span id="wordCount" class="wordCount">0 words</span>
-          <button type="submit" id="checkBtn">Check the text</button>
-        </div>
-      </form>
+      <section id="textPanel">
+        <form id="checkForm">
+          <label for="manuscript" class="visually-hidden">Your text</label>
+          <textarea
+            id="manuscript"
+            name="manuscript"
+            placeholder="Paste your chapter here…"
+            spellcheck="false"
+            required
+          ></textarea>
 
-      <p id="errorMsg" class="errorMsg" hidden></p>
-
-      <section id="results" class="results" hidden>
-        <div class="verdict">
-          <div id="stamp" class="stamp">checking</div>
-          <div class="verdictNumbers">
-            <div class="scoreLabel">likely AI-written</div>
-            <div id="scoreValue" class="scoreValue">0%</div>
+          <div class="formRow">
+            <span id="wordCount" class="wordCount">0 words</span>
+            <button type="submit" id="checkBtn">Check the text</button>
           </div>
-        </div>
+        </form>
 
-        <h2>Your text, annotated</h2>
-        <p class="annotatedHint">
-          Shaded lines scored higher for AI patterns. Darker shading, higher
-          confidence. Tap a line on mobile, or hover on desktop, for its
-          individual score.
-        </p>
-        <div id="annotated" class="annotated"></div>
+        <p id="errorMsg" class="errorMsg" hidden></p>
+
+        <section id="results" class="results" hidden>
+          <div class="verdict">
+            <div id="stamp" class="stamp">checking</div>
+            <div class="verdictNumbers">
+              <div class="scoreLabel">likely AI-written</div>
+              <div id="scoreValue" class="scoreValue">0%</div>
+            </div>
+          </div>
+
+          <h2>Your text, annotated</h2>
+          <p class="annotatedHint">
+            Shaded lines scored higher for AI patterns. Darker shading, higher
+            confidence. Tap a line on mobile, or hover on desktop, for its
+            individual score.
+          </p>
+          <div id="annotated" class="annotated"></div>
+        </section>
+      </section>
+
+      <section id="imagePanel" hidden>
+        <form id="imageForm">
+          <label for="imageInput" class="dropZone" id="dropZone">
+            <span id="dropZoneText">Tap to choose an image, or drop one here</span>
+            <img id="imagePreview" class="imagePreview" hidden alt="Selected image preview" />
+          </label>
+          <input
+            type="file"
+            id="imageInput"
+            name="image"
+            accept="image/*"
+            class="visually-hidden"
+            required
+          />
+
+          <div class="formRow">
+            <span id="imageFileName" class="wordCount"></span>
+            <button type="submit" id="checkImageBtn">Check the image</button>
+          </div>
+        </form>
+
+        <p id="imageErrorMsg" class="errorMsg" hidden></p>
+
+        <section id="imageResults" class="results" hidden>
+          <div class="verdict">
+            <div id="imageStamp" class="stamp">checking</div>
+            <div class="verdictNumbers">
+              <div class="scoreLabel">likely AI-generated</div>
+              <div id="imageScoreValue" class="scoreValue">0%</div>
+            </div>
+          </div>
+
+          <h2 id="imageVerdictText"></h2>
+          <p id="imageReasoning" class="annotatedHint"></p>
+        </section>
+      </section>
+
+      <section id="humanizePanel" hidden>
+        <form id="humanizeForm">
+          <label for="humanizeInput" class="visually-hidden">Your text</label>
+          <textarea
+            id="humanizeInput"
+            placeholder="Paste text to rewrite…"
+            spellcheck="false"
+            required
+          ></textarea>
+
+          <div class="formRow">
+            <input
+              type="password"
+              id="ownerKeyInput"
+              class="ownerKeyInput"
+              placeholder="Access code"
+              autocomplete="off"
+            />
+            <button type="submit" id="humanizeBtn">Rewrite it</button>
+          </div>
+        </form>
+
+        <p id="humanizeErrorMsg" class="errorMsg" hidden></p>
+
+        <section id="humanizeResults" class="results" hidden>
+          <div class="formRow">
+            <h2>Rewritten</h2>
+            <button type="button" id="copyBtn" class="copyBtn">Copy</button>
+          </div>
+          <div id="humanizeOutput" class="humanizeOutput"></div>
+        </section>
       </section>
     </main>
 
     <footer>
-      Powered by an open model (<code>chatgpt-detector-roberta</code>) via
-      Hugging Face's free inference tier. Treat the score as a second
-      opinion, not a verdict — these tools are wrong often enough that no
-      score alone should decide anything.
+      Text checks use an open model prompted to spot AI-writing patterns.
+      Image checks use a vision model prompted to spot AI-generation
+      artifacts — it is not built to catch doctored or edited real photos
+      and screenshots, only images generated from scratch by tools like
+      Midjourney or Stable Diffusion. Treat every score as a second opinion,
+      not a verdict — these checks are wrong often enough that no score
+      alone should decide anything.
     </footer>
   </div>
 
   <script src="/script.js"></script>
 </body>
-        </html>
+  </html>
