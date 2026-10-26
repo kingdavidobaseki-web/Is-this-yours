@@ -13,7 +13,9 @@ const GROQ_MODEL = 'openai/gpt-oss-120b';
 const MAX_SENTENCES = 120;
 const MAX_CHARS_PER_SENTENCE = 600;
 
-app.use(express.json({ limit: '1mb' }));
+// Images arrive as base64 data URLs, which run noticeably bigger than
+// the raw file — 10mb comfortably covers a typical phone photo.
+app.use(express.json({ limit: '10mb' }));
 
 // Serve the three frontend files directly from the repo root — no
 // subfolder needed, so no slash to type or mistype when creating files
@@ -21,6 +23,92 @@ app.use(express.json({ limit: '1mb' }));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('/style.css', (req, res) => res.sendFile(path.join(__dirname, 'style.css')));
 app.get('/script.js', (req, res) => res.sendFile(path.join(__dirname, 'script.js')));
+
+const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
+const OWNER_KEY = process.env.OWNER_KEY;
+
+const HUMANIZE_SYSTEM_PROMPT = `You are an expert fiction editor. Rewrite the text given to you so it no longer reads as AI-generated, based on Wikipedia's "Signs of AI Writing" field guide.
+
+Strip out: generic exaggerated praise/descriptors, formulaic wrap-up phrases ("in summary," "overall"), vague unsourced attributions ("some say"), negative parallelism ("it's not just X, it's Y"), rigid section structure, uniform sentence length/rhythm, compressed "clever" similes, narrator-explained emotion instead of shown emotion, and any AI disclaimers or hedging.
+
+Replace them with: concrete specific detail, varied sentence length and rhythm, plain direct word choice, and emotion shown through action/dialogue rather than stated.
+
+This is a style rewrite only — preserve every fact, plot point, and character detail exactly. Do not add new claims, dialogue, or events that weren't in the original. Do not change the point of view or tense.
+
+Respond with ONLY the rewritten text. No preamble, no explanation, no quotation marks wrapping it.`;
+
+const IMAGE_SYSTEM_PROMPT = `You are an expert at spotting AI-generated images (Midjourney, DALL-E, Stable Diffusion, Flux, and similar tools).
+
+Look closely at the image for telltale signs: unnatural skin texture, warped or extra fingers, inconsistent lighting or shadows, garbled or nonsensical text, overly smooth or waxy surfaces, impossible reflections, asymmetric earrings/eyes/objects that should match, and backgrounds that don't quite make physical sense.
+
+Note: this check is for AI-GENERATED images specifically, not for edited or doctored real photos/screenshots (like a faked bank balance) — that is a different kind of manipulation this check is not built to catch.
+
+Respond with ONLY valid JSON in this exact shape, no other text:
+{"aiScore": 0.0, "verdict": "short 4-8 word summary", "reasoning": "2-3 sentences explaining the specific visual evidence you saw"}
+
+aiScore is 0-1: 0 means clearly a real photo/human-made image, 1 means clearly AI-generated.`;
+
+app.post('/api/detect-image', async (req, res) => {
+  try {
+    if (!GROQ_API_KEY) {
+      return res.status(500).json({
+        error: 'Server is missing GROQ_API_KEY. Add it to your .env file and restart.',
+      });
+    }
+
+    const imageDataUrl = req.body && req.body.image ? String(req.body.image) : '';
+    if (!imageDataUrl.startsWith('data:image/')) {
+      return res.status(400).json({ error: 'Upload an image first.' });
+    }
+
+    const response = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: VISION_MODEL,
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        max_completion_tokens: 500,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: IMAGE_SYSTEM_PROMPT },
+              { type: 'image_url', image_url: { url: imageDataUrl } },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const message = data && data.error ? data.error.message || data.error : `HTTP ${response.status}`;
+      throw new Error(message);
+    }
+
+    const raw = data.choices && data.choices[0] && data.choices[0].message
+      ? data.choices[0].message.content
+      : null;
+    if (!raw) throw new Error('Empty response from model.');
+
+    const parsed = JSON.parse(raw);
+    const aiScore = Math.max(0, Math.min(1, Number(parsed.aiScore) || 0));
+
+    res.json({
+      aiScore,
+      verdict: parsed.verdict || '',
+      reasoning: parsed.reasoning || '',
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: `Image check failed: ${err.message}` });
+  }
+});
 
 // Very small sentence splitter. Good enough for prose; not meant to be
 // a full NLP tokenizer. Keeps abbreviations like "Mr." from exploding
@@ -139,6 +227,65 @@ app.post('/api/detect', async (req, res) => {
         ? 'Hit Groq\u2019s free-tier rate limit \u2014 wait a minute and try again.'
         : `Detector request failed: ${err.message}`,
     });
+  }
+});
+
+app.post('/api/humanize', async (req, res) => {
+  try {
+    const ownerKey = req.body && req.body.ownerKey ? String(req.body.ownerKey) : '';
+    const isOwner = Boolean(OWNER_KEY) && ownerKey === OWNER_KEY;
+
+    if (!isOwner) {
+      return res.status(402).json({
+        error: 'This is a premium feature. Payment isn\u2019t wired up yet \u2014 message the site owner for access.',
+        paymentRequired: true,
+      });
+    }
+
+    if (!GROQ_API_KEY) {
+      return res.status(500).json({
+        error: 'Server is missing GROQ_API_KEY. Add it to your .env file and restart.',
+      });
+    }
+
+    const text = (req.body && req.body.text ? String(req.body.text) : '').trim();
+    if (!text) {
+      return res.status(400).json({ error: 'Paste some text first.' });
+    }
+
+    const response = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        temperature: 0.7,
+        max_completion_tokens: 10000,
+        messages: [
+          { role: 'system', content: HUMANIZE_SYSTEM_PROMPT },
+          { role: 'user', content: text },
+        ],
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const message = data && data.error ? data.error.message || data.error : `HTTP ${response.status}`;
+      throw new Error(message);
+    }
+
+    const rewritten = data.choices && data.choices[0] && data.choices[0].message
+      ? data.choices[0].message.content
+      : null;
+    if (!rewritten) throw new Error('Empty response from model.');
+
+    res.json({ rewritten: rewritten.trim() });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: `Humanize request failed: ${err.message}` });
   }
 });
 
