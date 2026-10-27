@@ -7,6 +7,9 @@ const PORT = process.env.PORT || 3000;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODEL = 'openai/gpt-oss-120b';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 // Keep requests small enough to stay comfortably inside Groq's free rate
 // limits and avoid a single oversized payload timing out.
@@ -24,14 +27,31 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('/style.css', (req, res) => res.sendFile(path.join(__dirname, 'style.css')));
 app.get('/script.js', (req, res) => res.sendFile(path.join(__dirname, 'script.js')));
 
-const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 const OWNER_KEY = process.env.OWNER_KEY;
 
-const HUMANIZE_SYSTEM_PROMPT = `You are an expert fiction editor. Rewrite the text given to you so it no longer reads as AI-generated, based on Wikipedia's "Signs of AI Writing" field guide.
+const HUMANIZE_SYSTEM_PROMPT = `You are a ghostwriter rewriting AI-drafted prose so it reads like one specific, slightly imperfect human author wrote it on deadline — not polished, not symmetrical, not safe.
 
-Strip out: generic exaggerated praise/descriptors, formulaic wrap-up phrases ("in summary," "overall"), vague unsourced attributions ("some say"), negative parallelism ("it's not just X, it's Y"), rigid section structure, uniform sentence length/rhythm, compressed "clever" similes, narrator-explained emotion instead of shown emotion, and any AI disclaimers or hedging.
+Follow these rules exactly:
 
-Replace them with: concrete specific detail, varied sentence length and rhythm, plain direct word choice, and emotion shown through action/dialogue rather than stated.
+1. Vary sentence length aggressively. Never let three sentences in a row run the same length or rhythm. Follow a long sentence with a short one, or a fragment.
+
+2. Never open two sentences in the same paragraph with the same word or the same grammatical construction. No repeated "He didn't... / She didn't..." patterns. No repeated "[Name] [verb]ed" openers back to back.
+
+3. Cut any line that explains a character's emotion directly ("she felt sad", "he was relieved"). Show it through one concrete action or one piece of blunt dialogue instead.
+
+4. Delete clever or compressed similes and metaphors ("like a wound that never closed"). If a comparison is truly needed, make it plain and almost too simple — not literary.
+
+5. Make dialogue sound like real interrupted speech: people talk over each other, trail off, answer the wrong question, don't finish sentences. No character delivers a tidy, quotable "thesis statement" line.
+
+6. Cut aphoristic one-liners entirely ("Money is never free." "Silence can be louder than words."). If a sentence sounds like it belongs on a poster, make it blunter and less symmetrical, or cut it.
+
+7. Use plain, everyday vocabulary — nothing a careful ordinary writer wouldn't reach for. No thesaurus words.
+
+8. Small imperfection is good: a sentence that trails off, a one-line paragraph, slightly uneven pacing.
+
+9. No formulaic transitions ("Meanwhile," "Little did she know," "As the sun set over...").
+
+10. Keep paragraphs short and uneven in length, not uniform blocks.
 
 This is a style rewrite only — preserve every fact, plot point, and character detail exactly. Do not add new claims, dialogue, or events that weren't in the original. Do not change the point of view or tense.
 
@@ -50,37 +70,35 @@ aiScore is 0-1: 0 means clearly a real photo/human-made image, 1 means clearly A
 
 app.post('/api/detect-image', async (req, res) => {
   try {
-    if (!GROQ_API_KEY) {
+    if (!GEMINI_API_KEY) {
       return res.status(500).json({
-        error: 'Server is missing GROQ_API_KEY. Add it to your .env file and restart.',
+        error: 'Server is missing GEMINI_API_KEY. Add it to your .env file and restart.',
       });
     }
 
     const imageDataUrl = req.body && req.body.image ? String(req.body.image) : '';
-    if (!imageDataUrl.startsWith('data:image/')) {
+    const match = imageDataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    if (!match) {
       return res.status(400).json({ error: 'Upload an image first.' });
     }
+    const [, mimeType, base64Data] = match;
 
-    const response = await fetch(GROQ_URL, {
+    const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: VISION_MODEL,
-        temperature: 0,
-        response_format: { type: 'json_object' },
-        max_completion_tokens: 500,
-        messages: [
+        contents: [
           {
-            role: 'user',
-            content: [
-              { type: 'text', text: IMAGE_SYSTEM_PROMPT },
-              { type: 'image_url', image_url: { url: imageDataUrl } },
+            parts: [
+              { text: IMAGE_SYSTEM_PROMPT },
+              { inline_data: { mime_type: mimeType, data: base64Data } },
             ],
           },
         ],
+        generationConfig: {
+          temperature: 0,
+          responseMimeType: 'application/json',
+        },
       }),
     });
 
@@ -91,8 +109,8 @@ app.post('/api/detect-image', async (req, res) => {
       throw new Error(message);
     }
 
-    const raw = data.choices && data.choices[0] && data.choices[0].message
-      ? data.choices[0].message.content
+    const raw = data.candidates && data.candidates[0] && data.candidates[0].content
+      ? data.candidates[0].content.parts.map((p) => p.text || '').join('')
       : null;
     if (!raw) throw new Error('Empty response from model.');
 
@@ -261,7 +279,7 @@ app.post('/api/humanize', async (req, res) => {
       },
       body: JSON.stringify({
         model: GROQ_MODEL,
-        temperature: 0.7,
+        temperature: 1.0,
         max_completion_tokens: 10000,
         messages: [
           { role: 'system', content: HUMANIZE_SYSTEM_PROMPT },
