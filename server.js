@@ -83,26 +83,38 @@ app.post('/api/detect-image', async (req, res) => {
     }
     const [, mimeType, base64Data] = match;
 
-    const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: IMAGE_SYSTEM_PROMPT },
-              { inline_data: { mime_type: mimeType, data: base64Data } },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0,
-          responseMimeType: 'application/json',
+    const geminiBody = JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { text: IMAGE_SYSTEM_PROMPT },
+            { inline_data: { mime_type: mimeType, data: base64Data } },
+          ],
         },
-      }),
+      ],
+      generationConfig: {
+        temperature: 0,
+        responseMimeType: 'application/json',
+      },
     });
 
-    const data = await response.json();
+    // Gemini's free tier occasionally returns a transient "overloaded"
+    // error under demand spikes. One quick retry clears most of these
+    // without the user needing to tap the button again themselves.
+    let response;
+    let data;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: geminiBody,
+      });
+      data = await response.json();
+      if (response.ok) break;
+      const isOverloaded = data && data.error && /overload|high demand|503/i.test(data.error.message || '');
+      if (!isOverloaded || attempt === 1) break;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
 
     if (!response.ok) {
       const message = data && data.error ? data.error.message || data.error : `HTTP ${response.status}`;
@@ -207,106 +219,4 @@ app.post('/api/detect', async (req, res) => {
     }
 
     const text = (req.body && req.body.text ? String(req.body.text) : '').trim();
-    if (!text) {
-      return res.status(400).json({ error: 'Paste some text first.' });
-    }
-
-    const sentences = splitIntoSentences(text);
-    if (sentences.length === 0) {
-      return res.status(400).json({ error: "Couldn't find any sentences in that." });
-    }
-
-    const result = await callDetector(sentences);
-
-    const scoreByIndex = new Map(
-      (result.sentences || []).map((s) => [s.i, s.score])
-    );
-
-    const perSentence = sentences.map((sentence, idx) => {
-      const score = scoreByIndex.has(idx + 1) ? scoreByIndex.get(idx + 1) : 0.5;
-      const clamped = Math.max(0, Math.min(1, Number(score) || 0));
-      return { text: sentence, label: clamped >= 0.5 ? 'ai' : 'human', aiScore: clamped };
-    });
-
-    const overall =
-      typeof result.overall === 'number'
-        ? Math.max(0, Math.min(1, result.overall))
-        : perSentence.reduce((sum, s) => sum + s.aiScore, 0) / perSentence.length;
-
-    res.json({
-      overallAiScore: overall,
-      sentences: perSentence,
-    });
-  } catch (err) {
-    console.error(err);
-    const isRateLimit = err.message && /rate.?limit/i.test(err.message);
-    res.status(502).json({
-      error: isRateLimit
-        ? 'Hit Groq\u2019s free-tier rate limit \u2014 wait a minute and try again.'
-        : `Detector request failed: ${err.message}`,
-    });
-  }
-});
-
-app.post('/api/humanize', async (req, res) => {
-  try {
-    const ownerKey = req.body && req.body.ownerKey ? String(req.body.ownerKey) : '';
-    const isOwner = Boolean(OWNER_KEY) && ownerKey === OWNER_KEY;
-
-    if (!isOwner) {
-      return res.status(402).json({
-        error: 'This is a premium feature. Payment isn\u2019t wired up yet \u2014 message the site owner for access.',
-        paymentRequired: true,
-      });
-    }
-
-    if (!GROQ_API_KEY) {
-      return res.status(500).json({
-        error: 'Server is missing GROQ_API_KEY. Add it to your .env file and restart.',
-      });
-    }
-
-    const text = (req.body && req.body.text ? String(req.body.text) : '').trim();
-    if (!text) {
-      return res.status(400).json({ error: 'Paste some text first.' });
-    }
-
-    const response = await fetch(GROQ_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        temperature: 1.0,
-        max_completion_tokens: 10000,
-        messages: [
-          { role: 'system', content: HUMANIZE_SYSTEM_PROMPT },
-          { role: 'user', content: text },
-        ],
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      const message = data && data.error ? data.error.message || data.error : `HTTP ${response.status}`;
-      throw new Error(message);
-    }
-
-    const rewritten = data.choices && data.choices[0] && data.choices[0].message
-      ? data.choices[0].message.content
-      : null;
-    if (!rewritten) throw new Error('Empty response from model.');
-
-    res.json({ rewritten: rewritten.trim() });
-  } catch (err) {
-    console.error(err);
-    res.status(502).json({ error: `Humanize request failed: ${err.message}` });
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`Is This Yours? running at http://localhost:${PORT}`);
-});
+    i
