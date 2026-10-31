@@ -189,9 +189,10 @@ Signs of a human:
 - opinion, humor, a slip in logic, a real personal voice
 
 Scoring rules:
-- Judge the piece as a whole first. If it shows three or more AI signs, "overall" must be at least 0.7. If it is a chat-style reply (a step list or levels plus a closing offer), "overall" must be at least 0.85.
-- A sentence that belongs to an AI pattern (a numbered step, a bold item, a list entry, a closing offer) scores at least 0.7, even if it looks harmless alone.
-- Score a sentence below 0.3 only if it shows a sign of a human. If you cannot tell, score it 0.5, not lower.
+- Score each sentence on its own signs. If a sentence shows no clear sign of AI, score it 0.3 or lower, even if it is plain or clean.
+- Score a sentence 0.7 or higher only when you can name a specific AI sign in it (a repeated skeleton, a chatbot-format item, a stock phrase, an over-polished line).
+- A few isolated signs do not make a whole piece AI. Set "overall" from how much of the piece shows signs, not from how many kinds of signs you found.
+- The one case where "overall" must be at least 0.85 is a chat-style reply: a step list or levels, bold markup, and a closing offer.
 - Use the full range from 0 to 1. Do not bunch scores around the middle.
 
 Respond with ONLY valid JSON in this exact shape, no other text:
