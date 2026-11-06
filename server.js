@@ -207,10 +207,12 @@ Signs of an AI chatbot reply:
 - reassuring absolutes such as "100% safe"
 - every item given the same format and weight, like a price list
 - a closing line that offers a next step or asks which option the reader wants
+- a hook opener ("Ahhh! Those ones"), then several bold-labelled or numbered points of roughly equal size, then a punchy closer ("Na mathematics."). This structure counts as AI even in Pidgin or slang. Dialect, slang and bad spelling are never evidence of a human writer.
 
 Calibration examples (follow these scores closely):
 AI-written:
 - "Level 1: Start with one small stall. Na the safest way and e dey cheap. Tell me which level you wan try, I go send the full plan for you now now." → 0.95 (chatbot structure, reassuring absolute, closing offer, even in Pidgin)
+- "Ahhh! Those ones 😂 Na scam dem dey call am. How e dey work: *1. The Share na the weapon* Dem no get money for advert, so dem use YOU. *2.* Dem go carry you go one website full of ads. *3.* Sometimes e worse pass ads. Na exponential growth. Na mathematics." → 0.85 (hook, equal-weight labelled points, punchy closer, even in Pidgin)
 - "Harlow ran the docks. Pryce owned the mines. Dunmore bought whatever the others sold. Wick kept the books for all three." → 0.80 for each (same skeleton four times, too neat)
 - "A wave of sadness washed over her as the weight of the moment settled in." → 0.90 (stock phrases, narrator explains the feeling)
 - "Nobody spoke. Nobody moved. Nobody dared to breathe." → 0.90 (repeated negation, sequence of three)
@@ -280,6 +282,72 @@ async function callDetector(sentences) {
   return parsed;
 }
 
+// ---------- Gates, code-side style signals, and bands ----------
+
+const MIN_WORDS = 40;
+
+const STOCK_PHRASES = [
+  'a wave of', 'the weight of', 'a sense of', 'a mix of', 'for a moment',
+  'a beat', 'tapestry', 'testament', 'delve', 'palpable', 'ethereal',
+  'symphony of', 'in the end', "it's important to note", 'little did',
+  'heart pounded', 'moreover', 'furthermore', 'ultimately', 'vibrant',
+  'bustling', 'intricate',
+];
+
+function countWords(t) {
+  return (t.match(/\S+/g) || []).length;
+}
+
+// Random keyboard mashing: long words with 5+ consonants in a row.
+function looksLikeGibberish(text) {
+  const tokens = text.toLowerCase().match(/[a-z]{5,}/g) || [];
+  if (tokens.length < 3) return false;
+  const bad = tokens.filter((t) => /[^aeiouy]{5,}/.test(t)).length;
+  return bad / tokens.length > 0.3;
+}
+
+const clamp01 = (n) => Math.max(0, Math.min(1, n));
+
+// Signals computed in code. They ignore punctuation and spelling, so clean
+// human prose is not punished just for being clean.
+function styleSignals(sentences, fullText) {
+  const lens = sentences.map(countWords);
+  const mean = lens.reduce((a, b) => a + b, 0) / (lens.length || 1);
+  const variance = lens.reduce((a, b) => a + (b - mean) ** 2, 0) / (lens.length || 1);
+  const cv = mean ? Math.sqrt(variance) / mean : 0;
+  // Human writing usually has cv around 0.6+. Under 0.25 is very uniform.
+  const uniform = clamp01((0.55 - cv) / 0.3);
+
+  // Same opening word as the sentence before it
+  const openers = sentences.map((s) => (s.toLowerCase().match(/[a-z']+/) || [''])[0]);
+  let repeats = 0;
+  for (let i = 1; i < openers.length; i++) {
+    if (openers[i] && openers[i] === openers[i - 1]) repeats++;
+  }
+  const repeat = clamp01(repeats / Math.max(1, openers.length - 1) / 0.4);
+
+  const lower = fullText.toLowerCase();
+  const hits = STOCK_PHRASES.filter((p) => lower.includes(p)).length;
+  const per100 = hits / Math.max(1, countWords(fullText) / 100);
+  const stock = clamp01(per100 / 2);
+
+  const markup =
+    /(^|\n)\s*(\d+[.)]|[-\u2022*])\s/.test(fullText) ||
+    /\*[^*\n]{2,}\*/.test(fullText) ||
+    /level\s*\d/i.test(fullText)
+      ? 1
+      : 0;
+
+  const score = 0.3 * uniform + 0.3 * repeat + 0.25 * stock + 0.15 * markup;
+  return { score: clamp01(score), uniform, repeat, stock, markup };
+}
+
+function bandFor(score) {
+  if (score < 0.35) return 'human';
+  if (score <= 0.65) return 'inconclusive';
+  return 'ai';
+}
+
 app.post('/api/detect', async (req, res) => {
   try {
     if (!GROQ_API_KEY) {
@@ -293,102 +361,7 @@ app.post('/api/detect', async (req, res) => {
       return res.status(400).json({ error: 'Paste some text first.' });
     }
 
-    const sentences = splitIntoSentences(text);
-    if (sentences.length === 0) {
-      return res.status(400).json({ error: "Couldn't find any sentences in that." });
-    }
-
-    const result = await callDetector(sentences);
-
-    const scoreByIndex = new Map(
-      (result.sentences || []).map((s) => [s.i, s.score])
-    );
-
-    const perSentence = sentences.map((sentence, idx) => {
-      const score = scoreByIndex.has(idx + 1) ? scoreByIndex.get(idx + 1) : 0.5;
-      const clamped = Math.max(0, Math.min(1, Number(score) || 0));
-      return { text: sentence, label: clamped >= 0.5 ? 'ai' : 'human', aiScore: clamped };
-    });
-
-    const overall =
-      typeof result.overall === 'number'
-        ? Math.max(0, Math.min(1, result.overall))
-        : perSentence.reduce((sum, s) => sum + s.aiScore, 0) / perSentence.length;
-
-    res.json({
-      overallAiScore: overall,
-      sentences: perSentence,
-    });
-  } catch (err) {
-    console.error(err);
-    const isRateLimit = err.message && /rate.?limit/i.test(err.message);
-    res.status(502).json({
-      error: isRateLimit
-        ? 'Hit Groq\u2019s free-tier rate limit \u2014 wait a minute and try again.'
-        : `Detector request failed: ${err.message}`,
-    });
-  }
-});
-
-app.post('/api/humanize', async (req, res) => {
-  try {
-    const ownerKey = req.body && req.body.ownerKey ? String(req.body.ownerKey) : '';
-    const isOwner = Boolean(OWNER_KEY) && ownerKey === OWNER_KEY;
-
-    if (!isOwner) {
-      return res.status(402).json({
-        error: 'This is a premium feature. Payment isn\u2019t wired up yet \u2014 message the site owner for access.',
-        paymentRequired: true,
-      });
-    }
-
-    if (!GROQ_API_KEY) {
-      return res.status(500).json({
-        error: 'Server is missing GROQ_API_KEY. Add it to your .env file and restart.',
-      });
-    }
-
-    const text = (req.body && req.body.text ? String(req.body.text) : '').trim();
-    if (!text) {
-      return res.status(400).json({ error: 'Paste some text first.' });
-    }
-
-    const response = await fetch(GROQ_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        temperature: 1.0,
-        max_completion_tokens: 10000,
-        messages: [
-          { role: 'system', content: HUMANIZE_SYSTEM_PROMPT },
-          { role: 'user', content: text },
-        ],
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      const message = data && data.error ? data.error.message || data.error : `HTTP ${response.status}`;
-      throw new Error(message);
-    }
-
-    const rewritten = data.choices && data.choices[0] && data.choices[0].message
-      ? data.choices[0].message.content
-      : null;
-    if (!rewritten) throw new Error('Empty response from model.');
-
-    res.json({ rewritten: rewritten.trim() });
-  } catch (err) {
-    console.error(err);
-    res.status(502).json({ error: `Humanize request failed: ${err.message}` });
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`Is This Yours? running at http://localhost:${PORT}`);
-});
+    // Gates: don't score what can't be judged.
+    if (countWords(text) < MIN_WORDS) {
+      return res.status(400).json({
+        error: `Too short to judge. Paste at least ${MIN_WORDS} words; short text can't be scored rel
