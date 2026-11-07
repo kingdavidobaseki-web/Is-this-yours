@@ -200,12 +200,12 @@ Signs of an AI chatbot reply:
 - reassuring absolutes such as "100% safe"
 - every item given the same format and weight, like a price list
 - a closing line that offers a next step or asks which option the reader wants
-- a hook opener ("Ahhh! Those ones"), then several bold-labelled or numbered points of roughly equal size, then a punchy closer ("Na mathematics."). This structure counts as AI even in Pidgin or slang. Dialect, slang and bad spelling are never evidence of a human writer.
+- a hook opener, then several bold-labelled or numbered points of roughly equal size, then a punchy closer. Dialect, slang and bad spelling are never evidence of a human writer. Bold or numbered formatting alone is NOT evidence of AI, since many people format WhatsApp posts that way.
 
 Calibration examples (follow these scores closely):
 AI-written:
 - "Level 1: Start with one small stall. Na the safest way and e dey cheap. Tell me which level you wan try, I go send the full plan for you now now." → 0.95 (chatbot structure, reassuring absolute, closing offer, even in Pidgin)
-- "Ahhh! Those ones 😂 Na scam dem dey call am. How e dey work: *1. The Share na the weapon* Dem no get money for advert, so dem use YOU. *2.* Dem go carry you go one website full of ads. *3.* Sometimes e worse pass ads. Na exponential growth. Na mathematics." → 0.85 (hook, equal-weight labelled points, punchy closer, even in Pidgin)
+- "how e dey work: *1. The Share na the weapon* Dem no get money for advert, so dem use YOU. *2.* Dem go carry you go one website full of ads. *3.* Sometimes e worse pass ads. Na exponential growth. Na mathematics." → 0.85 (hook, equal-weight labelled points, punchy closer, even in Pidgin)
 - "Harlow ran the docks. Pryce owned the mines. Dunmore bought whatever the others sold. Wick kept the books for all three." → 0.80 for each (same skeleton four times, too neat)
 - "A wave of sadness washed over her as the weight of the moment settled in." → 0.90 (stock phrases, narrator explains the feeling)
 - "Nobody spoke. Nobody moved. Nobody dared to breathe." → 0.90 (repeated negation, sequence of three)
@@ -242,9 +242,10 @@ async function callDetector(sentences) {
     },
     body: JSON.stringify({
       model: GROQ_MODEL,
-      temperature: 0,
+            temperature: 0,
+      reasoning_effort: 'low',
       response_format: { type: 'json_object' },
-      max_completion_tokens: 10000,
+      max_completion_tokens: 4000,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: numbered },
