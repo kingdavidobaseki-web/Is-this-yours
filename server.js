@@ -242,10 +242,9 @@ async function callDetector(sentences) {
     },
     body: JSON.stringify({
       model: GROQ_MODEL,
-            temperature: 0,
-      reasoning_effort: 'low',
+                  temperature: 0,
       response_format: { type: 'json_object' },
-      max_completion_tokens: 4000,
+      max_completion_tokens: 6000,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: numbered },
