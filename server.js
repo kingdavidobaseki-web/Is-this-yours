@@ -143,7 +143,7 @@ function splitIntoSentences(text) {
   const matches = normalized.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [];
   return matches
     .map((s) => s.trim())
-        .filter((s) => s.length > 0)
+    .filter((s) => s.length > 0)
     .flatMap((s) => {
       const words = s.split(/\s+/);
       if (words.length <= 40) return [s];
@@ -154,7 +154,6 @@ function splitIntoSentences(text) {
       return parts;
     })
     .slice(0, MAX_SENTENCES)
-  
     .map((s) =>
       s.length > MAX_CHARS_PER_SENTENCE ? s.slice(0, MAX_CHARS_PER_SENTENCE) : s
     );
@@ -288,7 +287,6 @@ async function callDetector(sentences) {
   }
   throw lastError;
 }
-}
 
 const MIN_WORDS = 40;
 
@@ -375,7 +373,7 @@ app.post('/api/detect', async (req, res) => {
 
     const scoreByIndex = new Map(
       (result.sentences || []).map((s) => [s.i, s.score])
-    );
+        );
 
     const perSentence = sentences.map((sentence, idx) => {
       const score = scoreByIndex.has(idx + 1) ? scoreByIndex.get(idx + 1) : 0.5;
