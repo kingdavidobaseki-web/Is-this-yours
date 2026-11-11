@@ -242,7 +242,7 @@ async function callDetector(sentences) {
     },
     body: JSON.stringify({
       model: GROQ_MODEL,
-                  temperature: 0,
+      temperature: 0,
       response_format: { type: 'json_object' },
       max_completion_tokens: 6000,
       messages: [
@@ -317,15 +317,8 @@ function styleSignals(sentences, fullText) {
   const per100 = hits / Math.max(1, countWords(fullText) / 100);
   const stock = clamp01(per100 / 2);
 
-  const markup =
-    /(^|\n)\s*(\d+[.)]|[-\u2022*])\s/.test(fullText) ||
-    /\*[^*\n]{2,}\*/.test(fullText) ||
-    /level\s*\d/i.test(fullText)
-      ? 1
-      : 0;
-
-  const score = 0.3 * uniform + 0.3 * repeat + 0.25 * stock + 0.15 * markup;
-  return { score: clamp01(score), uniform, repeat, stock, markup };
+  const score = 0.35 * uniform + 0.35 * repeat + 0.3 * stock;
+  return { score: clamp01(score), uniform, repeat, stock };
 }
 
 function bandFor(score) {
@@ -382,19 +375,13 @@ app.post('/api/detect', async (req, res) => {
 
     const signals = styleSignals(sentences, text);
     const w = sentences.length >= 8 ? 0.25 : 0.1;
-    const blended = clamp01((1 - w) * llmOverall + w * signals.score);
-
-    const listLines = (text.match(/(^|\n)\s*([-\u2022]|\d+[.)])\s/g) || []).length;
-    const boldBits = (text.match(/\*[^*\n]{2,}\*/g) || []).length;
-    const chatFormat = listLines >= 3 || boldBits >= 3;
-    const overall = chatFormat ? Math.max(blended, 0.6) : blended;
+    const overall = clamp01((1 - w) * llmOverall + w * signals.score);
 
     res.json({
       overallAiScore: overall,
       band: bandFor(overall),
       llmScore: llmOverall,
       styleScore: signals.score,
-      chatFormat,
       sentences: perSentence,
     });
   } catch (err) {
@@ -415,7 +402,7 @@ app.post('/api/humanize', async (req, res) => {
 
     if (!isOwner) {
       return res.status(402).json({
-        error: 'This is a premium feature. Payment isn\u2019t wired up yet \u2014 message the site owner for access.',
+        error: 'This is a premium feature. Payment isn\u2019t set up yet.',
         paymentRequired: true,
       });
     }
