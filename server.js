@@ -99,7 +99,7 @@ app.post('/api/detect-image', async (req, res) => {
 
     let response;
     let data;
-    for (let attempt = 0; attempt < 4; attempt++) {
+        for (let attempt = 0; attempt < 4; attempt++) {
       response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -110,11 +110,12 @@ app.post('/api/detect-image', async (req, res) => {
       const isOverloaded = data && data.error && /overload|high demand|503/i.test(data.error.message || '');
       if (!isOverloaded || attempt === 3) break;
       await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
+    }
 
     if (!response.ok) {
       const message = data && data.error ? data.error.message || data.error : `HTTP ${response.status}`;
       throw new Error(message);
-    }
+        }
 
     const raw = data.candidates && data.candidates[0] && data.candidates[0].content
       ? data.candidates[0].content.parts.map((p) => p.text || '').join('')
