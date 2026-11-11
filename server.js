@@ -143,8 +143,18 @@ function splitIntoSentences(text) {
   const matches = normalized.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [];
   return matches
     .map((s) => s.trim())
-    .filter((s) => s.length > 0)
+        .filter((s) => s.length > 0)
+    .flatMap((s) => {
+      const words = s.split(/\s+/);
+      if (words.length <= 40) return [s];
+      const parts = [];
+      for (let i = 0; i < words.length; i += 30) {
+        parts.push(words.slice(i, i + 30).join(' '));
+      }
+      return parts;
+    })
     .slice(0, MAX_SENTENCES)
+  
     .map((s) =>
       s.length > MAX_CHARS_PER_SENTENCE ? s.slice(0, MAX_CHARS_PER_SENTENCE) : s
     );
@@ -234,45 +244,50 @@ Respond with ONLY valid JSON in this exact shape, no other text:
 async function callDetector(sentences) {
   const numbered = sentences.map((s, i) => `${i + 1}: ${s}`).join('\n');
 
-  const response = await fetch(GROQ_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${GROQ_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      temperature: 0,
-      response_format: { type: 'json_object' },
-      max_completion_tokens: 6000,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: numbered },
-      ],
-    }),
-  });
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await fetch(GROQ_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+          temperature: 0,
+          reasoning_effort: 'low',
+          response_format: { type: 'json_object' },
+          max_completion_tokens: 12000,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: numbered },
+          ],
+        }),
+      });
 
-  const data = await response.json();
+      const data = await response.json();
 
-  if (!response.ok) {
-    const message = data && data.error ? data.error.message || data.error : `HTTP ${response.status}`;
-    throw new Error(message);
+      if (!response.ok) {
+        const message = data && data.error ? data.error.message || data.error : `HTTP ${response.status}`;
+        throw new Error(message);
+      }
+
+      const raw = data.choices && data.choices[0] && data.choices[0].message
+        ? data.choices[0].message.content
+        : null;
+
+      if (!raw) throw new Error('Empty response from model.');
+
+      return JSON.parse(raw);
+    } catch (e) {
+      lastError = e;
+      const retryable = /validate JSON|failed_generation|not valid JSON|Unexpected token|Empty response/i.test(e.message || '');
+      if (!retryable) break;
+    }
   }
-
-  const raw = data.choices && data.choices[0] && data.choices[0].message
-    ? data.choices[0].message.content
-    : null;
-
-  if (!raw) throw new Error('Empty response from model.');
-
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    throw new Error('Model returned text that was not valid JSON.');
-  }
-
-  return parsed;
+  throw lastError;
+}
 }
 
 const MIN_WORDS = 40;
