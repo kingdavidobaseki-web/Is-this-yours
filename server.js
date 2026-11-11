@@ -144,15 +144,8 @@ function splitIntoSentences(text) {
   return matches
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
-    .flatMap((s) => {
-      const words = s.split(/\s+/);
-      if (words.length <= 40) return [s];
-      const parts = [];
-      for (let i = 0; i < words.length; i += 30) {
-        parts.push(words.slice(i, i + 30).join(' '));
-      }
-      return parts;
-    })
+    .    .filter((s) => s.length > 0)
+    .slice(0, MAX_SENTENCES)
     .slice(0, MAX_SENTENCES)
     .map((s) =>
       s.length > MAX_CHARS_PER_SENTENCE ? s.slice(0, MAX_CHARS_PER_SENTENCE) : s
@@ -255,7 +248,7 @@ async function callDetector(sentences) {
         body: JSON.stringify({
           model: GROQ_MODEL,
           temperature: 0,
-          reasoning_effort: 'low',
+          reasoning_effort: 'medium',
           response_format: { type: 'json_object' },
           max_completion_tokens: 12000,
           messages: [
