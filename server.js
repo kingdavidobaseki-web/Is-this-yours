@@ -144,8 +144,8 @@ function splitIntoSentences(text) {
   return matches
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
-    .    .filter((s) => s.length > 0)
-    .slice(0, MAX_SENTENCES)
+    
+  
     .slice(0, MAX_SENTENCES)
     .map((s) =>
       s.length > MAX_CHARS_PER_SENTENCE ? s.slice(0, MAX_CHARS_PER_SENTENCE) : s
