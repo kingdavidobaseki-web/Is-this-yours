@@ -8,7 +8,7 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODEL = 'openai/gpt-oss-120b';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-3.8-flash';
+const GEMINI_MODEL = 'gemini-3.5-flash-lite';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 // Keep requests small enough to stay comfortably inside Groq's free rate
@@ -105,7 +105,7 @@ app.post('/api/detect-image', async (req, res) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: geminiBody,
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(60000),
         });
         data = await response.json();
         if (response.ok) break;
