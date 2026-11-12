@@ -112,6 +112,7 @@ app.post('/api/detect-image', async (req, res) => {
         const isOverloaded = data && data.error && /overload|high demand|503/i.test(data.error.message || '');
         if (!isOverloaded) break;
       } catch (e) {
+                console.error('Gemini fetch error:', e.message, e.cause);
         if (attempt === 2) {
           throw new Error('Could not reach the image model. Try a smaller image or try again in a minute.');
         }
